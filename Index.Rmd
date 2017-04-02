@@ -1,0 +1,94 @@
+---
+title: "PracticalMachineLearningCourseProject"
+author: "Iwona Grad"
+date: "2 april 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Summary
+
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. However, people regularly quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, I use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants which were asked to perform barbell lifts correctly and incorrectly in 5 different ways: exactly according to the specification (Class A), throwing the elbows to the front (Class B), lifting the dumbbell only halfway (Class C), lowering the dumbbell only halfway (Class D) and throwing the hips to the front (Class E). The data for this project come from this source: http://groupware.les.inf.puc-rio.br/har.
+
+The training data was divided into a training data and a validation data sets. The most commonly used prediction model and the one which performes well in competitions is random forest and it was chosen to be used on the training data. Then it was validated on the validation set. Since the expected out-of-sample error rate of less than 0.05% and over 99.5% accuracy was achieved, no further models were tested. The model was verified on the validation data subset and than it was used on the testing data set. The model preformed very well(it has achieved 100% accuracy).
+
+
+
+```{r loading the data, echo=FALSE}
+library(caret)
+library(randomForest)
+
+url <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+download.file(url, "pml_training.csv")
+
+training <- read.csv("pml_training.csv", na.strings = c("NA","#DIV/0!",""))
+
+url <-  "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+download.file(url, "pml_testing.csv")
+
+testing <- read.csv("pml_testing.csv")
+```
+
+## Cleaning the data
+
+Data looks full of columns with NAs. Caret allows to diagnose predictors (columns) that have one unique value (i.e. are zero variance predictors) or predictors that are have both of the following characteristics: they have very few unique values relative to the number of samples and the ratio of the frequency of the most common value to the frequency of the second most common value is large. It is good to remove them as well as columns that contain NAs and 1 through 6, which contain identifying data, time stamp and other data irrelevant to our question.. 
+```{r cleaning, echo=FALSE}
+str(training)
+
+training <- training[, colSums(is.na(training)) == 0]
+
+training <- training[, names(training)[!(nzv(training, saveMetrics = TRUE)[, 4])]]
+
+training[,1:6] <- NULL
+
+```
+
+#Creating training and validation subsets
+
+"Classe" is the variable determining if the excercise was done correctly.
+
+```{r division of data}
+inTrain <- createDataPartition(training$classe, p = 0.6, list = FALSE)
+subsetTraining <- training[inTrain,]
+subsetValidation <- training[-inTrain,]
+```
+
+
+# RandomForest Model
+I had a lot of problems with creation of the model, because of the CPU resources required. Basically it was impossible to run, so I setup to run it in Parallel, using all the CPU cores available (as advised by someone who encountered the problem previously).
+```{r model building, echo=FALSE}
+require(parallel)
+    require(doParallel)
+    cl <- makeCluster(detectCores() - 1)
+    registerDoParallel(cl)
+
+```
+```{r}
+TrainFit <- randomForest(classe ~ ., data = subsetTraining)
+```
+
+#Predicting with the random forest model on the training set, measuring prediction accuracy
+```{r, model testing}
+TrainPred <- predict(TrainFit, subsetTraining)
+confusionMatrix(TrainPred, subsetTraining$classe)
+```
+
+#Validation of the model on the validation data subset
+
+The model predicts with 99% accuracy the correctly done exercise.
+```{r}
+ValidationPredict <- predict(TrainFit, subsetValidation)
+confusionMatrix(ValidationPredict, subsetValidation$classe)$overall[1]
+```
+
+#Using the model on the testing data
+
+The model predicts with 100% accuracy the correctly done exercise in the testing set.
+```{r}
+TestingValidation <- predict(TrainFit, testing)
+TestingValidation
+```
+
